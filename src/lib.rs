@@ -13,12 +13,16 @@ fn read_values<R: Read>(buffer: &mut Bytes<R>, mut max_bits: i8) -> Result<(u64,
     let mut result: u64 = 0;
     let mut shift = 0;
     while max_bits > 0 {
-        let next = buffer.next().unwrap().unwrap() as u64;
+        let next = match buffer.next() {
+            Some(Ok(v)) => v as u64,
+            Some(Err(e)) => return Err(e),
+            _ => return Err(Error::new(ErrorKind::Other,"Buffer empty"))
+        };
         result |= (next & VALUE_MASK) << shift;
         if next & CONTINUE_MASK == 0 {
             if max_bits < 8 {
                 if next & (0xff << max_bits) != 0 {
-                    return Err(Error::new(ErrorKind::Other,"Wrong value pal"));
+                    return Err(Error::new(ErrorKind::Other,"Value using bits it shouldn't."));
                 }
             }
             return Ok((result,next,shift));
@@ -94,6 +98,12 @@ mod tests {
         assert!(b(&[0xff, 0]).read_varint(16).unwrap() == 127);
         assert!(b(&[0x81, 0x7f]).read_varint(16).unwrap() == -127);
         assert!(b(&[0x80, 0x7f]).read_varint(16).unwrap() == -128);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_decode_empty_buffer() {
+        b(&[]).read_varuint(1).unwrap();
     }
 
     #[test]
