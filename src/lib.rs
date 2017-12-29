@@ -16,7 +16,7 @@ fn read_values<R: Read>(buffer: &mut Bytes<R>, mut max_bits: i8) -> Result<(u64,
         let next = match buffer.next() {
             Some(Ok(v)) => v as u64,
             Some(Err(e)) => return Err(e),
-            _ => return Err(Error::new(ErrorKind::Other,"Buffer empty"))
+            _ => return Err(Error::new(ErrorKind::UnexpectedEof,"Buffer empty"))
         };
         result |= (next & VALUE_MASK) << shift;
         if next & CONTINUE_MASK == 0 {
