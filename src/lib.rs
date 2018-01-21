@@ -12,17 +12,31 @@ const SIGN_MASK: u64 = 0x40;
 fn read_values<R: Read>(buffer: &mut Bytes<R>, mut max_bits: i8) -> Result<(u64,u64,u64),Error> {
     let mut result: u64 = 0;
     let mut shift = 0;
+    println!("max_bits {:?}", max_bits);
     while max_bits > 0 {
         let next = buffer.next().unwrap().unwrap() as u64;
-        result |= (next & VALUE_MASK) << shift;
+        // result |= (next & VALUE_MASK) << shift;
         if next & CONTINUE_MASK == 0 {
             if max_bits < 8 {
-                if next & (0xff << max_bits) != 0 {
-                    return Err(Error::new(ErrorKind::Other,"Wrong value pal"));
+                println!("shift {:?} max_bits {:?} mask {:X} next {:X} AND {:X}", shift, max_bits, (0xff >> max_bits+1), next, next & (0xff >> max_bits+1));
+                if shift == 0 {
+                    if next & (0xff << max_bits)!= 0 {
+                        return Err(Error::new(ErrorKind::Other,"Too many bits used"));
+                    }
+                    result |= (next & VALUE_MASK) << shift;
+                } else {
+                    if next & (0xff >> max_bits+1)!= 0 {
+                        return Err(Error::new(ErrorKind::Other,"Too many bits used"));
+                    }
+                    println!("m {:X} {:?} \n\n{:X}\n{:X}\n", next & VALUE_MASK, shift, result, (next & VALUE_MASK) << shift-7+max_bits as u64);
+                    result |= (next & VALUE_MASK) << shift-7+max_bits as u64;
                 }
+            } else {
+                result |= (next & VALUE_MASK) << shift;
             }
             return Ok((result,next,shift));
         }
+        result |= (next & VALUE_MASK) << shift;
         shift += 7;
         max_bits -= 7;
     }
@@ -81,8 +95,8 @@ mod tests {
         assert!(b(&[128, 1]).read_varuint(32).unwrap() == 128);
         assert!(b(&[255, 255, 3]).read_varuint(32).unwrap() == 0xffff);
         assert!(b(&[0xE5, 0x8E, 0x26]).read_varuint(32).unwrap() == 624485);
-        assert!(b(&[255, 255, 255, 255, 0b1111]).read_varuint(32).unwrap() == 0xffff_ffff);
-        assert!(b(&[255, 255, 255, 255, 255, 255, 255, 255, 255, 1]).read_varuint(64).unwrap() == 0xffff_ffff_ffff_ffff);
+        assert!(b(&[0xff, 0xff, 0xff, 0xff, 0x78]).read_varuint(32).unwrap() == 0xffff_ffff);
+        assert!(b(&[0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x40]).read_varuint(64).unwrap() == 0xffff_ffff_ffff_ffff);
     }
 
     #[test]
@@ -123,7 +137,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_decode_overflow_u32() {
-        b(&[128, 128, 128, 128, 16]).read_varuint(32).unwrap();
+        b(&[0x80, 0x80, 0x80, 0x80, 0x07]).read_varuint(32).unwrap();
     }
 
     #[test]
@@ -147,7 +161,14 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_decode_overflow_i32() {
-        b(&[128, 128, 128, 128, 16]).read_varint(32).unwrap();
+        b(&[0x80, 0x80, 0x80, 0x80, 0x07]).read_varint(32).unwrap();
+    }
+
+    #[test]
+    fn test_decode_i32() {
+        println!("asdflasdkjfhasldkfhjasldkfjhasldkfhjsf");
+        let x = b(&[0x80, 0x80, 0x80, 0x80, 0x78]).read_varint(32).unwrap();
+        println!("{:X}", x);
     }
 
     #[test]
