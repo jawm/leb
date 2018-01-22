@@ -108,6 +108,11 @@ mod tests {
     // fn test_decode_overflow_u1() {
     //     b(&[2]).read_varuint(1).unwrap();
     // }
+    #[test]
+    #[should_panic]
+    fn test_decode_empty_buffer() {
+        b(&[]).read_varuint(1).unwrap();
+    }
 
     #[test]
     #[should_panic]
