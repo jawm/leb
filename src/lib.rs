@@ -29,28 +29,28 @@ pub fn vuN<R: Read>(buffer: &mut Bytes<R>, max_bits: i64) -> u64  {
     assert!(max_bits > 0);
     let byte = buffer.next().unwrap().unwrap() as u64;
     assert!(max_bits >=7 || byte & 0x7f < 0xff << max_bits);
-    let x = byte & 0x7f;
+    let result = byte & 0x7f;
     if byte & 0x80 == 0 {
-        return x;
+        return result;
     } else {
-        return x | (vuN(buffer, max_bits-7) << 7);
+        return result | (vuN(buffer, max_bits-7) << 7);
     }
 }
 
 pub fn vsN<R: Read>(buffer: &mut Bytes<R>, max_bits: i64) -> i64 {
     assert!(max_bits > 0);
     let byte = buffer.next().unwrap().unwrap() as i64;
-    let mask = (-1 << max_bits) & 0x7f;
+    let mask = ((u64::pow(2, 64-max_bits as u32)-1 << max_bits%64) & 0x7f )as i64;
     assert!(max_bits >= 7 || byte & mask == 0 || byte & mask == mask);
-    let x = byte & 0x7f as i64;
+    let result = byte & 0x7f as i64;
     if byte & 0x80 == 0 {
-        if byte & 0x40 == 0 {
-            return x;
+        return if byte & 0x40 == 0 {
+            result
         } else {
-            return x | (-1i64 ^ 0x7fi64);
-        }
+            result | (-1i64 ^ 0x7fi64)
+        };
     } else {
-        return x | (vsN(buffer, max_bits-7) << 7);
+        return result | (vsN(buffer, max_bits-7) << 7);
     }
 }
 
@@ -70,6 +70,7 @@ mod tests {
         assert!(vuN(&mut b(&[0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01]), 64) == 0xffff_ffff_ffff_ffff);
         assert!(vsN(&mut b(&[0x80, 0x7f]), 32) == -128);
         assert!(vsN(&mut b(&[0x80, 0x80, 0x80, 0x80, 0x78]), 32) == -2147483648);
+        assert!(vsN(&mut b(&[0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x7f]), 64) == i64::min_value());
     }
 
     #[test]
