@@ -17,41 +17,53 @@ pub trait ReadLEB : Iterator {
 
 impl<R: Read> ReadLEB for Bytes<R> {
     fn read_varuint(&mut self, max_bits: i8) -> Result<u64, Error> {
-        return Ok(vuN(self, max_bits as i64));
+        return vuN(self, max_bits as i64);
     }
 
     fn read_varint(&mut self, max_bits: i8) -> Result<i64, Error> {
-        return Ok(vsN(self, max_bits as i64));
+        return vsN(self, max_bits as i64);
     }
 }
 
-pub fn vuN<R: Read>(buffer: &mut Bytes<R>, max_bits: i64) -> u64  {
+pub fn vuN<R: Read>(buffer: &mut Bytes<R>, max_bits: i64) -> Result<u64, Error>  {
     assert!(max_bits > 0);
-    let byte = buffer.next().unwrap().unwrap() as u64;
+    let byte = match buffer.next(){
+        Some(n) => n.unwrap() as u64,
+        None => {return Err(Error::new(ErrorKind::UnexpectedEof, "No more data"));}
+    };
     assert!(max_bits >=7 || byte & 0x7f < 0xff << max_bits);
     let result = byte & 0x7f;
     if byte & 0x80 == 0 {
-        return result;
+        return Ok(result);
     } else {
-        return result | (vuN(buffer, max_bits-7) << 7);
+        if let Ok(a) = vuN(buffer, max_bits-7) {
+            return Ok(result | a << 7);
+        }
     }
+    return Err(Error::new(ErrorKind::Other, "Bad data"));
 }
 
-pub fn vsN<R: Read>(buffer: &mut Bytes<R>, max_bits: i64) -> i64 {
+pub fn vsN<R: Read>(buffer: &mut Bytes<R>, max_bits: i64) -> Result<i64, Error> {
     assert!(max_bits > 0);
-    let byte = buffer.next().unwrap().unwrap() as i64;
+    let byte = match buffer.next(){
+        Some(n) => n.unwrap() as i64,
+        None => {return Err(Error::new(ErrorKind::UnexpectedEof, "No more data"));}
+    };
     let mask = ((u64::pow(2, 64-max_bits as u32)-1 << max_bits%64) & 0x7f )as i64;
     assert!(max_bits >= 7 || byte & mask == 0 || byte & mask == mask);
     let result = byte & 0x7f as i64;
     if byte & 0x80 == 0 {
-        return if byte & 0x40 == 0 {
-            result
+        if byte & 0x40 == 0 {
+            return Ok(result);
         } else {
-            result | (-1i64 ^ 0x7fi64)
+            return Ok(result | (-1i64 ^ 0x7fi64));
         };
     } else {
-        return result | (vsN(buffer, max_bits-7) << 7);
+        if let Ok(a) = vsN(buffer, max_bits-7) {
+            return Ok(result | a << 7);
+        }
     }
+    return Err(Error::new(ErrorKind::Other, "Bad data"));
 }
 
 #[cfg(test)]
@@ -61,16 +73,6 @@ mod tests {
 
     fn b(bytes: &[u8]) -> Bytes<Cursor<Vec<u8>>> {
         Cursor::new(bytes.to_vec()).bytes()
-    }
-
-    #[test]
-    fn new() {
-        assert!(vuN(&mut b(&[0]), 1) == 0);
-        assert!(vuN(&mut b(&[0xE5, 0x8E, 0x26]), 32) == 624485);
-        assert!(vuN(&mut b(&[0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01]), 64) == 0xffff_ffff_ffff_ffff);
-        assert!(vsN(&mut b(&[0x80, 0x7f]), 32) == -128);
-        assert!(vsN(&mut b(&[0x80, 0x80, 0x80, 0x80, 0x78]), 32) == -2147483648);
-        assert!(vsN(&mut b(&[0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x7f]), 64) == i64::min_value());
     }
 
     #[test]
@@ -112,7 +114,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_decode_empty_buffer() {
-        b(&[]).read_varuint(1).unwrap();
+        println!("{:?}",b(&[]).read_varuint(1));
     }
 
     #[test]
